@@ -1,0 +1,10 @@
+/data
+/.vscode
+/__pycache__
+/dist
+
+/data_parser/__pycache__
+
+src/**/data
+src/**/__pycache__
+src/**/models
