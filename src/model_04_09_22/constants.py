@@ -16,10 +16,13 @@ RAW_DATA_FILES = {
 }
 DATA_DIR = './data'
 DATA_FILES = {
+    'pop_users': f'{DATA_DIR}/popular_customers.csv',
+    'pop_items': f'{DATA_DIR}/popular_articles.csv',
     'users': f'{DATA_DIR}/customers.csv',
     'items': f'{DATA_DIR}/articles.csv',
     'transactions': f'{DATA_DIR}/transactions.csv',
-    'master': f'{DATA_DIR}/master.csv'
+    'master_intersection': f'{DATA_DIR}/master_AND.csv',
+    'master_union': f'{DATA_DIR}/master_OR.csv'
 }
 MODEL_DIR = './models'
 DATETIME_FORMAT = '%Y-%m-%d'
