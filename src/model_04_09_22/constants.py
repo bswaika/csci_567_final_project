@@ -24,5 +24,8 @@ DATA_FILES = {
     'master_intersection': f'{DATA_DIR}/master_AND.csv',
     'master_union': f'{DATA_DIR}/master_OR.csv'
 }
+DATA_SOURCE_DIR = './data/source'
+DATA_SOURCE_TRACKER = './trackers/source_tracker.csv'
+MODEL_TRACKER = './trackers/model_tracker.csv'
 MODEL_DIR = './models'
 DATETIME_FORMAT = '%Y-%m-%d'

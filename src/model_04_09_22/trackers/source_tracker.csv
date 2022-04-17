@@ -1,0 +1,3 @@
+id,desc,max,seq,shuffle,seasonal,seasonal_years
+7cb8b45d-d4b9-44d8-ba51-554ab92a0222,1 month prior to prediction,1000,75,False,False,0
+ff01743d-cb89-4ffe-8e88-0895218dea7f,1 month prior to prediction,100000,75,False,False,0
