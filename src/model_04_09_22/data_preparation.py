@@ -29,7 +29,7 @@
 '''
 
 import sys, uuid, tqdm, hmac, hashlib
-from typing import Tuple
+from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 from datetime import timedelta
@@ -203,28 +203,124 @@ def generate_sequence(dataframe: pd.DataFrame, point, offset, seq_length):
     labels = get_next_purchases(dataframe[user_mask], date)
     return (features, (uid, labels))
 
+def split_data(user_id, user_transactions: pd.DataFrame, count, sequences, num_labels, sl_no) -> Optional[Tuple[str, pd.DataFrame, dict]]:
+    purchase_densities = user_transactions.groupby('t_dat')['article_id'].count().reset_index().sort_values(by='t_dat')
+    purchase_densities['article_cumfreq'] = purchase_densities['article_id'].cumsum() / count
+    split_ratio = 0.75
+    # Encourage the closest split to 75%
+    lowest_diff_idx = abs(purchase_densities['article_cumfreq'] - split_ratio).argmin()
+    split_point = purchase_densities.loc[lowest_diff_idx, 'article_cumfreq']
+    # print(purchase_densities)
+    # As long as it is not above 85%
+    if split_point <= 0.85:
+        split_at = purchase_densities['article_cumfreq'] <= split_point
+    # Go back under 75%
+    else:
+        split_at = purchase_densities['article_cumfreq'] <= split_ratio
+        # Get the actual split percentage
+        if purchase_densities.loc[split_at, 'article_id'].sum() != 0:
+            split_point = purchase_densities[split_at]['article_cumfreq'].iloc[-1]
+        else:
+            split_point = 0
+    # If past is too little then ignore - since model would possibly not have 
+    # enough temporal data to train on - emphasis on longer past
+    if split_point < 0.35:
+        return None
+    else:
+        seq_length = purchase_densities.loc[split_at, 'article_id'].sum()
+        label_length = purchase_densities.loc[~split_at, 'article_id'].sum()
+        split_date = purchase_densities.loc[purchase_densities['article_cumfreq'] == split_point, 't_dat'].reset_index().drop(columns='index')['t_dat'].values[0]
+        time_mask = user_transactions['t_dat'] <= split_date
+        features = user_transactions[time_mask].reset_index().drop(columns=['index']).loc[max(0, seq_length-sequences):, :]
+        labels = user_transactions[~time_mask].reset_index().drop(columns=['index'])['article_id'].to_list()[:min(label_length, num_labels)]
+        uid = hmac.new(b'9196', (str(user_id) + str(split_date)).encode('utf-8'), hashlib.sha256).hexdigest()[:16]
+        uid += str(sl_no)
+        features['id'] = uid
+        return uid, features, labels
 
-if __name__ == "__main__":
+def prepare_datatset_v2(master: pd.DataFrame, sequences=45, num_labels=15):
+    master['t_dat'] = master['t_dat'].view(dtype=np.int64) // 10 ** 9
+    num_transactions_per_user = master.groupby('customer_id')['t_dat'].count().reset_index()
+    num_transactions_per_user = num_transactions_per_user[num_transactions_per_user['t_dat'] >= 15]
+
+    # print(num_transactions_per_user[(num_transactions_per_user['t_dat'] > 60) & (num_transactions_per_user['t_dat'] <= 100)].count())
+    # print(num_transactions_per_user[(num_transactions_per_user['t_dat'] > 100)])
+
+    # Dont accomodate too many purchases - can skew the model - a pattern exists where these people
+    # are buying 100+ items in one day
+    condition = num_transactions_per_user['t_dat'] <= 120 
+    num_transactions_per_user = num_transactions_per_user[condition].reset_index().drop(columns=['index'])
+    num_taken = 0
+
+    feature_df = pd.DataFrame()
+    label_df = {
+        'id': [],
+        'labels': []
+    }
+
+    for user_id, count in tqdm.tqdm(num_transactions_per_user.values):
+        mask = master['customer_id'] == user_id
+        user_transactions = master[mask].reset_index().drop(columns=['index'])
+        if count < 65:
+            # Generate a single data point - ~8949
+            result = split_data(user_id, user_transactions, count, sequences, num_labels, num_taken)
+            if result:
+                uid, features, labels = result
+                feature_df = feature_df.append(features)
+                label_df['id'].append(uid)
+                label_df['labels'].append(labels)
+                num_taken += 1
+        else:
+            # Try to generate multiple data points - ~86
+            BATCH_SIZE = 60
+            # Slide window of 60 transactions over 5 transactions
+            INCREMENTS = 5
+            i = 0
+            while i + BATCH_SIZE <= count:
+                result = split_data(user_id, user_transactions.loc[i:i+BATCH_SIZE-1, :], BATCH_SIZE, sequences, num_labels, num_taken)
+                if result:
+                    uid, features, labels = result
+                    feature_df = feature_df.append(features)
+                    label_df['id'].append(uid)
+                    label_df['labels'].append(labels)
+                    num_taken += 1
+                i += INCREMENTS   
+    return feature_df.reset_index().drop(columns='index'), pd.DataFrame(label_df)
+
+def load():
     # Generate config from the command line flags
     config = parse_flags(sys.argv[1:])
 
     IN_FILE = DATA_FILES['master_intersection'] if config['master'] == 'AND' else DATA_FILES['master_union']
-    OUT_FILES = {
-        'features': f'{DATA_SOURCE_DIR}/features/{config["id"]}.csv',
-        'labels': f'{DATA_SOURCE_DIR}/labels/{config["id"]}.csv'        
-    }
-
+    
     # Load master dataframe and sort by date
     master = load_df(IN_FILE)
     master = transactions.set_date_column_type(master)
     master = master.sort_values(by='t_dat').reset_index().drop(columns=['index'])
 
-    # Prepare dataset
-    points, features, labels = prepare_dataset(master, config['weeks'], config['max'], config['seq'])
+    return config, master
 
+def save(features, labels, config, OUT_FILES):
     # Save dataset
     save_df(features, OUT_FILES['features'])
     save_df(labels, OUT_FILES['labels'])
 
     # Save config
     save_config(config)
+
+if __name__ == "__main__":
+    config, master = load()
+    OUT_FILES = {
+        'features': f'{DATA_SOURCE_DIR}/features/{config["id"]}.csv',
+        'labels': f'{DATA_SOURCE_DIR}/labels/{config["id"]}.csv'        
+    }
+
+    # Prepare dataset
+    # points, features, labels = prepare_dataset(master, config['weeks'], config['max'], config['seq'])
+
+    # Prepare dataset
+    features, labels = prepare_datatset_v2(master)
+    print(features.shape, labels.shape)
+
+    save(features, labels, config, OUT_FILES)
+    

@@ -8,5 +8,10 @@
 src/**/data
 src/**/__pycache__
 src/**/models
+src/**/samples
+src/**/predictions
+src/**/item_similarities
+src/**/submissions
+src/**/*.csv
 
 /test/predictions

@@ -1,3 +1,5 @@
 id,desc,max,seq,shuffle,seasonal,seasonal_years
 7cb8b45d-d4b9-44d8-ba51-554ab92a0222,1 month prior to prediction,1000,75,False,False,0
 ff01743d-cb89-4ffe-8e88-0895218dea7f,1 month prior to prediction,100000,75,False,False,0
+35c4c70c-9502-481e-a29a-e46a9e95260b,Uses V2 preparation. Doesn't consider horizons. Only tries to figure out balanced transaction past and future. Some params don't matter at all,0,45,False,False,0
+603c644a-2350-47c1-a00d-de01e684db75,Uses V2 preparation. Doesn't consider horizons. Only tries to figure out balanced transaction past and future. Fixed ID collisions.,0,45,False,False,0
